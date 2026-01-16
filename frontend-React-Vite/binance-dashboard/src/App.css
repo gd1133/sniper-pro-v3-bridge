@@ -1,0 +1,20 @@
+/* Removemos o max-width e o padding que o Vite coloca por padrão */
+#root {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: left; /* Alinhamento à esquerda para tabelas e cards */
+}
+
+/* Garante que o fundo escuro ocupe a altura total da tela sem bordas brancas */
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #020617; /* Slate 950 */
+}
+
+/* Classes utilitárias extras caso o Tailwind falhe em algo específico */
+.dashboard-container {
+  min-height: 100vh;
+  width: 100vw;
+}

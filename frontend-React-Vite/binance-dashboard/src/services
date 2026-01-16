@@ -1,0 +1,25 @@
+import axios from 'axios';
+import { io } from 'socket.io-client';
+
+// Endereço da sua API Node.js (backend-api)
+const API_URL = 'http://localhost:3000';
+
+export const api = axios.create({
+  baseURL: API_URL,
+});
+
+// Conexão via WebSocket para receber logs e saldo em tempo real
+export const socket = io(API_URL, {
+  autoConnect: false,
+});
+
+export const tradeService = {
+  async getStatus() {
+    const response = await api.get('/api/status');
+    return response.data;
+  },
+  async getHistory() {
+    const response = await api.get('/api/history');
+    return response.data;
+  }
+};
