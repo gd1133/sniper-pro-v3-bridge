@@ -7,189 +7,155 @@ import time
 import os
 
 class GeminiAgent:
-    """O Cérebro de IA que valida múltiplas confluências de momentum e reversão."""
+    """
+    O Cérebro de IA: Analisa a 'Vela Mestra' e filtra notícias de manipulação.
+    """
     def __init__(self):
         self.api_key = os.getenv("GEMINI_API_KEY", "")
-        self.model = "gemini-2.5-flash-preview-09-2025"
+        # ATUALIZADO: Versão estável do modelo para evitar "Erro na IA"
+        self.model = "gemini-1.5-flash" 
         self.url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
 
-    def ask_gemini(self, prompt):
-        """Consulta o Gemini com proteção contra erros de conexão e retentativas."""
+    def ask_gemini(self, prompt, is_news_check=False):
+        system_instruction = (
+            "Você é o Diretor de Risco do Sniper IA V3. "
+            "Sua missão é detectar manipulação institucional e notícias de alto impacto. "
+            "Se houver dados do FED, inflação (CPI) ou notícias negativas graves, retorne 'HOLD'. "
+            "Caso contrário, avalie a força da tendência. "
+            "Responda APENAS JSON: {'verdict': 'BUY/SELL/HOLD', 'confidence': 0-100, 'reason': 'breve'}."
+        )
+
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "systemInstruction": {
-                "parts": [{"text": (
-                    "És um Analista Quantitativo de Elite. Analisa RSI, Bollinger, Momentum, Volume e Price Action. "
-                    "Sê proativo e agressivo. Não esperes apenas por baleias. Se houver força de movimento, valida a entrada. "
-                    "Responde apenas JSON: {'verdict': 'BUY/SELL/HOLD/WAIT', 'confidence': 0-100, 'reason': 'breve'}."
-                )}]
-            },
+            "systemInstruction": {"parts": [{"text": system_instruction}]},
             "generationConfig": {"responseMimeType": "application/json"}
         }
 
-        for i in range(5):
-            try:
-                response = requests.post(self.url, json=payload, timeout=12)
+        try:
+            for i in [1, 2, 4]:
+                response = requests.post(self.url, json=payload, timeout=8)
                 if response.status_code == 200:
                     result = response.json()
                     text = result['candidates'][0]['content']['parts'][0]['text']
                     return json.loads(text)
-            except:
-                time.sleep(2 ** i)
+                time.sleep(i)
+        except: return None
         return None
 
 class ReversalStrategy:
     def __init__(self, exchange=None):
         self.exchange = exchange
         self.ai = GeminiAgent()
+        
+        # --- CONFIGURAÇÃO DE ALTO IMPACTO (ATUALIZADA) ---
         self.config = {
-            "RISK_PER_TRADE_PCT": 0.18,    # 18% de $35 ~ $6.30
-            "MIN_NOTIONAL_USD": 6.50,      # Segurança contra Erro -4164 ($5 min)
-            "TAKE_PROFIT_PCT": 1.1,        # Alvo de Scalping rápido
-            "STOP_LOSS_PCT": 3.0,          # Proteção técnica contra volatilidade
-            "MIN_SCORE": 3                 # Gatilho técnico agressivo
+            "RISK_PER_TRADE_PCT": 0.35,      # INVESTIMENTO DE 35% DA BANCA
+            "MIN_NOTIONAL_USD": 6.10,
+            "STOP_LOSS_MAX": 4.0,            # Stop levemente reduzido para maior giro
+            "VOLUME_THRESHOLD": 1.4,         # MAIS AGRESSIVO: Baixei de 1.9 para 1.4 (pega mais entradas)
+            "MOMENTUM_MIN": 0.20             # MAIS AGRESSIVO: Baixei de 0.35 para 0.20% de força na vela
         }
 
-    def get_indicators(self, df):
-        """Calcula múltiplos indicadores para análise simultânea."""
-        # 1. RSI (Momentum)
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss.replace(0, 0.001)
-        df['rsi'] = 100 - (100 / (1 + rs))
-
-        # 2. Bandas de Bollinger (Volatilidade)
-        df['sma'] = df['close'].rolling(window=20).mean()
-        df['std'] = df['close'].rolling(window=20).std()
-        df['upper'] = df['sma'] + (df['std'] * 2)
-        df['lower'] = df['sma'] - (df['std'] * 2)
-
-        # 3. EMA 200 (Tendência Macro)
-        df['ema200'] = df['close'].ewm(span=200).mean()
-        return df
-
-    def detect_price_action(self, df):
-        """Identifica padrões de velas em tempo real."""
-        last = df.iloc[-1]
-        prev = df.iloc[-2]
-        body = abs(last['close'] - last['open'])
-        lower_wick = min(last['close'], last['open']) - last['low']
-        upper_wick = last['high'] - max(last['close'], last['open'])
-
-        patterns = {"bullish": 0, "bearish": 0}
-        
-        # Hammer / Rejeição de Fundo
-        if lower_wick > (body * 2) and body > 0: patterns["bullish"] += 2
-        # Engolfo de Alta
-        if last['close'] > prev['open'] and last['open'] < prev['close'] and last['close'] > last['open']: patterns["bullish"] += 2
-        # Shooting Star / Rejeição de Topo
-        if upper_wick > (body * 2) and body > 0: patterns["bearish"] += 2
-        
-        return patterns
+    def get_mtf_indicators(self, symbol):
+        try:
+            ohlcv_1d = self.exchange.fetch_ohlcv(symbol, timeframe='1d', limit=50)
+            df_1d = pd.DataFrame(ohlcv_1d, columns=['ts', 'o', 'h', 'l', 'c', 'v'])
+            ema20_1d = df_1d['c'].ewm(span=20).mean().iloc[-1]
+            
+            ohlcv_5m = self.exchange.fetch_ohlcv(symbol, timeframe='5m', limit=100)
+            df_5m = pd.DataFrame(ohlcv_5m, columns=['ts', 'o', 'h', 'l', 'c', 'v'])
+            
+            df_5m['ema_fast'] = df_5m['c'].ewm(span=9).mean()
+            df_5m['ema_slow'] = df_5m['c'].ewm(span=21).mean()
+            
+            return df_5m, ema20_1d, df_1d['c'].iloc[-1]
+        except: return None, None, None
 
     def check_dual_trend(self, symbol):
-        """MOTOR MULTI-ESTRATÉGIA: RSI + Bollinger + Price Action + IA."""
-        df = self.get_data(symbol, '1m', 100)
-        if df is None or len(df) < 50: return {'score': 0, 'trend': 'NONE', 'reason': 'Dados insuficientes'}
-
-        df = self.get_indicators(df)
-        patterns = self.detect_price_action(df)
-        last = df.iloc[-1]
-        
-        # Correção do RuntimeWarning de volume
-        vol_mean = df['volume'].mean()
-        vol_factor = last['volume'] / vol_mean if vol_mean > 0 else 1
-        
-        score_long = 0
-        score_short = 0
-
-        # ESTRATÉGIA 1: EMA 200
-        if last['close'] > last['ema200']: score_long += 1
-        else: score_short += 1
-
-        # ESTRATÉGIA 2: RSI Agressivo
-        if last['rsi'] < 40: score_long += 1
-        if last['rsi'] > 60: score_short += 1
-
-        # ESTRATÉGIA 3: Bollinger Reversion
-        if last['close'] <= last['lower']: score_long += 2
-        if last['close'] >= last['upper']: score_short += 2
-
-        # ESTRATÉGIA 4: Price Action
-        score_long += patterns["bullish"]
-        score_short += patterns["bearish"]
-
-        # ESTRATÉGIA 5: Volume de Agressão
-        if vol_factor > 1.3:
-            score_long += 1
-            score_short += 1
-
-        final_score = max(score_long, score_short)
-        trend = "LONG" if score_long > score_short else "SHORT"
-
-        # VALIDAÇÃO AGRESSIVA DA IA (Gatilho para score >= 3)
-        if final_score >= 3:
-            prompt = (f"Moeda {symbol} a {last['close']}. RSI: {last['rsi']:.1f}, "
-                      f"Price Action Score: {max(patterns.values())}, Volume: {vol_factor:.1f}x. "
-                      f"Sinal de {trend} detectado. Validas entrada rápida?")
-            
-            ai_res = self.ai.ask_gemini(prompt)
-            if ai_res:
-                print(f"🧠 Gemini [{symbol}]: {ai_res['verdict']} | Confiança: {ai_res['confidence']}% | {ai_res['reason']}")
-                # Confiança reduzida para 65% para maior rotatividade
-                if ai_res['verdict'] in ['BUY', 'SELL'] and ai_res['confidence'] >= 65:
-                    return {'score': 5, 'trend': trend, 'reason': ai_res['reason']}
-
-        # Confluência Técnica Pura (Score alto)
-        if final_score >= 5:
-            return {'score': 5, 'trend': trend, 'reason': 'Confluência Técnica Máxima'}
-
-        return {'score': 0, 'trend': 'NONE', 'reason': 'Análise incompleta'}
-
-    def monitor_exit_with_timeout(self, symbol, side, entry_price, elapsed_minutes):
-        """Gere a saída com foco em lucro rápido e proteção de capital."""
         try:
-            ticker = self.exchange.fetch_ticker(symbol)
-            cur = ticker['last']
-            pnl = ((cur - entry_price) / entry_price) * 100 if side == 'LONG' else ((entry_price - cur) / entry_price) * 100
-            
-            # Saídas Fixas
-            if pnl >= self.config['TAKE_PROFIT_PCT']: return True, f"🎯 LUCRO: {pnl:.2f}%", pnl
-            if pnl <= -self.config['STOP_LOSS_PCT']: return True, f"🛑 STOP: {pnl:.2f}%", pnl
+            df_5m, ema20_1d, price_1d = self.get_mtf_indicators(symbol)
+            if df_5m is None: return {'score': 0, 'trend': 'NONE'}
 
-            # IA decide se a tendência acabou a cada 2 minutos
-            if elapsed_minutes >= 2 and int(elapsed_minutes) % 2 == 0:
-                ai_decision = self.ai.ask_gemini(f"Trade {side} {symbol} com {pnl:.2f}% PNL. A força continua?")
-                if ai_decision and ai_decision['verdict'] in ['SELL', 'WAIT'] and pnl > 0.1:
-                    return True, f"IA: Saída Antecipada ({ai_decision['reason']})", pnl
-
-            return False, "Vigiando", pnl
-        except: return False, "Erro", 0
-
-    def get_data(self, symbol, timeframe, limit):
-        try:
-            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
-            return pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        except: return None
-
-    def calculate_safe_amount(self, symbol_info, price, total_balance):
-        """Calcula quantidade garantindo que o valor nominal seja > $6.00."""
-        try:
-            # 1. Calcula com base nos 18% da banca
-            calculated_value = total_balance * self.config["RISK_PER_TRADE_PCT"]
-            # 2. Força o mínimo de $6.50 para evitar erro -4164
-            order_value = max(calculated_value, self.config["MIN_NOTIONAL_USD"])
+            last_5m = df_5m.iloc[-1]
+            avg_vol = df_5m['v'].rolling(20).mean().iloc[-1]
             
-            lot_filter = next(f for f in symbol_info['info']['filters'] if f['filterType'] == 'LOT_SIZE')
-            step_size = float(lot_filter['stepSize'])
-            precision = int(round(-math.log10(step_size), 0)) if step_size < 1 else 0
+            macro_trend = "LONG" if price_1d > ema20_1d else "SHORT"
             
-            qty = math.floor((order_value / price) * (10 ** precision)) / (10 ** precision)
+            # Detecção AGRESSIVA de Vela Institucional
+            is_huge_volume = last_5m['v'] > (avg_vol * self.config["VOLUME_THRESHOLD"])
+            candle_change = ((last_5m['c'] - last_5m['o']) / last_5m['o']) * 100
             
-            # Garantia final de arredondamento
-            if (qty * price) < 5.10:
-                qty = math.ceil((5.20 / price) * (10 ** precision)) / (10 ** precision)
+            score = 0
+            # Agora ele entra com nota 7 se o volume for bom, mesmo sem ser "perfeito"
+            if is_huge_volume and abs(candle_change) >= self.config["MOMENTUM_MIN"]:
+                if macro_trend == "LONG" and candle_change > 0: score = 10
+                if macro_trend == "SHORT" and candle_change < 0: score = 10
+
+            if score >= 7: 
+                prompt = (
+                    f"CONTEXTO: Moeda {symbol}. Tendência Diária: {macro_trend}. "
+                    f"Vela de 5m com volume {last_5m['v']/avg_vol:.1f}x acima da média. "
+                    "Posso entrar?"
+                )
+                ai_res = self.ai.ask_gemini(prompt)
                 
-            return qty
+                # Se a IA der erro (None), o robô entra assim mesmo (Modo Ultra Agressivo)
+                if ai_res is None:
+                    print(f"⚠️ IA OFFLINE: Entrando por análise técnica pura (Score {score})")
+                    return {
+                        'score': score, 
+                        'trend': macro_trend, 
+                        'reason': "🔥 ENTRADA TÉCNICA (IA OFFLINE)"
+                    }
+
+                if ai_res['verdict'] != 'HOLD' and ai_res['confidence'] > 55:
+                    return {
+                        'score': score, 
+                        'trend': macro_trend, 
+                        'reason': f"🔥 {ai_res['reason']} | Confiança: {ai_res['confidence']}%"
+                    }
+                else:
+                    print(f"🛑 IA FILTROU: {ai_res['reason']}")
+                    
+            return {'score': 0, 'trend': 'NONE'}
+        except Exception as e:
+            return {'score': 0, 'trend': 'ERROR'}
+
+    def monitor_trend_follow(self, symbol, side, entry, peak):
+        try:
+            ohlcv = self.exchange.fetch_ohlcv(symbol, timeframe='5m', limit=30)
+            df = pd.DataFrame(ohlcv, columns=['ts', 'o', 'h', 'l', 'c', 'v'])
+            df['ema_fast'] = df['c'].ewm(span=9).mean()
+            df['ema_slow'] = df['c'].ewm(span=21).mean()
+            
+            last = df.iloc[-1]
+            pnl = ((last['c'] - entry) / entry) * 100 if side == 'LONG' else ((entry - last['c']) / entry) * 100
+            
+            should_exit = False
+            reason = ""
+
+            if side == 'LONG':
+                if last['ema_fast'] < last['ema_slow'] and pnl > 0.1: # PNL mínimo de saída reduzido
+                    should_exit = True
+                    reason = "MUDANÇA DE DIREÇÃO (EMA CROSSOVER)"
+            else:
+                if last['ema_fast'] > last['ema_slow'] and pnl > 0.1:
+                    should_exit = True
+                    reason = "MUDANÇA DE DIREÇÃO (EMA CROSSOVER)"
+
+            if pnl <= -self.config["STOP_LOSS_MAX"]:
+                should_exit = True
+                reason = "STOP LOSS DE SEGURANÇA"
+
+            return should_exit, reason, pnl, last['c']
+        except: return False, "Erro", 0, peak
+
+    def calculate_safe_amount(self, market_info, price, total_balance):
+        try:
+            # FIXO EM 35% CONFORME SOLICITADO
+            val = total_balance * self.config["RISK_PER_TRADE_PCT"]
+            lot = next(f for f in market_info['info']['filters'] if f['filterType'] == 'LOT_SIZE')
+            step = float(lot['stepSize'])
+            prec = int(round(-math.log10(step), 0)) if step < 1 else 0
+            return math.floor((val / price) * (10 ** prec)) / (10 ** prec)
         except: return 0

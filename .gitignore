@@ -1,12 +1,21 @@
---- SEGURANÇA (O MAIS IMPORTANTE) ---
+==========================================
+
+SEGURANÇA (O MAIS IMPORTANTE)
+
+==========================================
 
 Nunca subir as chaves de API para o GitHub
 
 .env
 *.env
 config.json
+secrets.py
 
---- PYTHON ---
+==========================================
+
+PYTHON
+
+==========================================
 
 Pastas de ambiente virtual
 
@@ -38,28 +47,39 @@ wheels/
 .installed.cfg
 *.egg
 
---- NODE.js ---
+==========================================
 
-Dependências (são instaladas no servidor, não enviadas pelo git)
+NODE.js & REACT
+
+==========================================
+
+Dependências
 
 node_modules/
+/dist
+/build
+.node_repl_history
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
---- SISTEMA E LOGS ---
+==========================================
 
-Arquivos de log do robô
+SISTEMA E LOGS
+
+==========================================
 
 *.log
 logs/
 .DS_Store
 Thumbs.db
 
---- IDEs ---
+==========================================
 
-Configurações do VS Code ou PyCharm
+IDEs (VS Code / PyCharm)
+
+==========================================
 
 .vscode/
 .idea/

@@ -1,0 +1,10 @@
+Ignorar pastas pesadas que o Docker não deve copiar do Windows
+**/node_modules
+**/venv
+**/.env
+**/.git
+**/dist
+**/build
+**/.log
+**/.pyc
+.vscode/
